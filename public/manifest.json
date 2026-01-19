@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Arbitrage Pro - AI Agent",
+  "version": "1.0.0",
+  "description": "2026 Enterprise Cross-border Arbitrage AI Agent",
+  "permissions": ["activeTab", "scripting"],
+  "host_permissions": [
+    "https://integrate.api.nvidia.com/*",
+    "https://generativelanguage.googleapis.com/*",
+    "https://*.amazon.com/*",
+    "https://*.1688.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "index.html",
+    "default_title": "Open Arbitrage Agent"
+  }
+}
