@@ -91,6 +91,11 @@ Return JSON only: {"keywords": "...", "category": "...", "brand": "..."}`;
     }
 
     // Extract and parse JSON from response
+    // CRITICAL: Validate response structure before accessing nested properties
+    if (!response || !response.choices || !response.choices[0] || !response.choices[0].message || !response.choices[0].message.content) {
+      throw new Error('Invalid API response structure: missing choices[0].message.content');
+    }
+
     let rawContent = response.choices[0].message.content.trim();
 
     // Try to extract JSON if wrapped in markdown or text
@@ -99,10 +104,25 @@ Return JSON only: {"keywords": "...", "category": "...", "brand": "..."}`;
       rawContent = jsonMatch[0];
     }
 
-    const extracted = JSON.parse(rawContent);
+    let extracted;
+    try {
+      extracted = JSON.parse(rawContent);
+    } catch (parseError) {
+      // IMPORTANT: Provide helpful error context for JSON parsing failures
+      const contentSnippet = rawContent.length > 100 ? rawContent.substring(0, 100) + '...' : rawContent;
+      throw new Error(`Failed to parse JSON response. Content: "${contentSnippet}". Error: ${parseError.message}`);
+    }
+
+    // Helper function to split at word boundaries
+    const truncateAtWordBoundary = (text, maxLength) => {
+      if (text.length <= maxLength) return text;
+      const truncated = text.substring(0, maxLength);
+      const lastSpace = truncated.lastIndexOf(' ');
+      return lastSpace > 0 ? truncated.substring(0, lastSpace) : truncated;
+    };
 
     return {
-      keywords: extracted.keywords || title.substring(0, 50),
+      keywords: extracted.keywords || truncateAtWordBoundary(title, 50),
       category: extracted.category || '',
       brand: extracted.brand || ''
     };
@@ -110,9 +130,17 @@ Return JSON only: {"keywords": "...", "category": "...", "brand": "..."}`;
   } catch (error) {
     console.error("Keyword extraction failed:", error);
 
-    // Fallback: use first 50 characters of title
+    // Helper function to split at word boundaries
+    const truncateAtWordBoundary = (text, maxLength) => {
+      if (text.length <= maxLength) return text;
+      const truncated = text.substring(0, maxLength);
+      const lastSpace = truncated.lastIndexOf(' ');
+      return lastSpace > 0 ? truncated.substring(0, lastSpace) : truncated;
+    };
+
+    // Fallback: use first 50 characters of title at word boundary
     return {
-      keywords: title.substring(0, 50).trim(),
+      keywords: truncateAtWordBoundary(title, 50).trim(),
       category: '',
       brand: ''
     };
