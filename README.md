@@ -4,10 +4,15 @@ A Chrome extension for cross-border e-commerce arbitrage analysis. Analyze produ
 
 ## Features
 
-- **Product Scraping**: Extract product data from Amazon and 1688.com
-- **Profitability Analysis**: Calculate ROI, margins, and profit scores
-- **SWOT Analysis**: AI-powered strengths, weaknesses, opportunities, threats
-- **Strategic Recommendations**: Actionable insights for arbitrage opportunities
+- **Multi-Platform Price Comparison**: Compare prices across 12+ e-commerce platforms
+  - International: Amazon, eBay, Walmart, AliExpress, Etsy, Wayfair
+  - Chinese Sourcing: 1688.com, Taobao, JD.com, Pinduoduo, Alibaba.com, Made-in-China
+- **AI-Powered Product Matching**: NVIDIA NIM API extracts keywords for cross-platform search
+- **Configurable Cost Analysis**: Customize exchange rates, shipping, platform fees, marketing costs
+- **Real-Time Profit Calculation**: ROI, margins, break-even analysis for each platform
+- **Comparison Table UI**: Visual ranking with expandable details
+- **Smart Caching**: 5-minute cache for faster repeated analyses
+- **Parallel Processing**: Searches multiple platforms simultaneously with progress tracking
 
 ## Tech Stack
 
@@ -62,16 +67,46 @@ npm run build
 
 ## Usage
 
-1. Open the extension on an Amazon or 1688 product page
-2. Click "RUN" to analyze the product
-3. View profitability analysis, SWOT, and recommendations
+1. **Navigate to a Product Page**: Open any Amazon or 1688.com product page
+2. **Open Extension**: Click the extension icon in Chrome toolbar
+3. **Configure Settings** (optional):
+   - Click ⚙️ to set NVIDIA API key and select model
+   - Click 💰 to adjust cost parameters (exchange rate, shipping, fees)
+4. **Run Analysis**: Click "RUN ANALYSIS" button
+5. **View Results**:
+   - Progress bar shows platform search status
+   - Comparison table displays all platforms sorted by ROI
+   - Click chevron (▼) on any row to see detailed cost breakdown
+6. **Force Refresh**: Check "Force Refresh" to bypass cache and get fresh results
+
+### Pro Tips
+- First run extracts product details and searches all platforms (~15-30 seconds)
+- Subsequent runs use 5-minute cache for instant results
+- Change cost config? Cache is automatically cleared
+- Best ROI platforms are highlighted in emerald/blue colors
 
 ## Configuration
 
-API settings can be configured in the extension UI:
-- NVIDIA API Key
-- Model selection (Llama 3.1 405B, GLM-4, etc.)
-- Exchange rate (CNY/USD)
+### API Settings
+- NVIDIA API Key (stored securely in chrome.storage.local)
+- Model selection (7 models available including Llama 3.1 405B, GLM-4, Gemini)
+
+### Cost Configuration
+- Exchange rates (CNY/USD, user-adjustable)
+- Shipping costs by region (USA: $1.15/lb, Europe: $1.35/lb, Other: $1.25/lb)
+- Platform fee percentages (customizable per platform)
+  - Amazon: Uses FBA calculator
+  - eBay: 10%, Walmart: 15%, AliExpress: 8%, Etsy: 6.5%, Wayfair: 12%
+- Marketing CAC percentage (default: 12%)
+- VAT/Tax percentage (default: 5%)
+- ROI and score filter thresholds (min ROI: 30%, min score: 60)
+
+### Platform Selection
+- Enable/disable specific platforms via configuration
+- Currently supporting 12 platforms across 3 categories:
+  - International (6 platforms)
+  - Sourcing (4 platforms)
+  - Wholesale (2 platforms)
 
 ## Project Structure
 

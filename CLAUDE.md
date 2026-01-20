@@ -13,6 +13,58 @@ This is a Chrome extension for cross-border e-commerce arbitrage analysis. The e
 - NVIDIA NIM API for AI inference (supports multiple models including Llama 3.1 405B, GLM-4, Gemini, etc.)
 - Chrome Scripting API for web scraping
 
+## Recent Major Changes (2026-01-20)
+
+### Multi-Platform Comparison Feature
+
+**Overview**: Upgraded from 2-platform comparison (Amazon + 1688) to 12+ platform support with AI-powered product matching and configurable cost analysis.
+
+**Key Components**:
+- **AI Keyword Extraction** (`src/utils/keywordExtractor.js`): Uses NVIDIA NIM API to extract searchable keywords from product titles, removing adjectives and promotional words
+- **Multi-Platform Search Scrapers** (`src/utils/searchScrapers.js`): Content script scrapers for eBay, AliExpress, Taobao, Walmart, JD, Pinduoduo
+- **Parallel Tab Manager** (`src/utils/tabManager.js`): Manages background tabs for simultaneous platform searches with dynamic batch sizing (4/6/8 tabs)
+- **Profit Calculator** (`src/utils/profitCalculator.js`): Calculates net profit, ROI, margins with configurable cost parameters
+- **Caching System** (`src/utils/cache.js`): 5-minute cache using chrome.storage.session with automatic invalidation on config changes
+- **Comparison Table UI** (`src/components/ComparisonTable.jsx`, `src/components/PlatformRow.jsx`): Sortable comparison table with expandable row details
+
+**Architecture Changes**:
+- Platform configuration moved to `src/config/platforms.js` (12 platforms with enable/disable flags)
+- Cost configuration moved to `src/config/costConfig.js` (exchange rates, shipping, fees)
+- Settings panels split into `SettingsPanel.jsx` and `CostConfigPanel.jsx`
+- App.jsx refactored to orchestrate multi-platform workflow instead of single analysis
+
+**New File Structure**:
+```
+src/
+├── config/
+│   ├── platforms.js         # Platform definitions (12 platforms)
+│   └── costConfig.js         # Cost calculation parameters
+├── components/
+│   ├── ComparisonTable.jsx   # Main comparison table container
+│   ├── PlatformRow.jsx       # Individual platform row with expandable details
+│   ├── SettingsPanel.jsx     # API key and model settings
+│   └── CostConfigPanel.jsx   # Cost parameter configuration
+├── utils/
+│   ├── keywordExtractor.js   # AI keyword extraction (NVIDIA NIM)
+│   ├── searchScrapers.js     # Search result scrapers (6 platforms)
+│   ├── tabManager.js         # Chrome tab management with retry logic
+│   ├── profitCalculator.js   # Profit/ROI calculation engine
+│   ├── cache.js              # Session-based caching system
+│   └── scrapers.js           # Original Amazon/1688 detail scrapers
+```
+
+**Performance Optimizations**:
+- Dynamic batch sizing: 4 tabs (1-4 platforms), 6 tabs (5-8 platforms), 8 tabs (9+ platforms)
+- Session-based caching with 5-minute expiration reduces redundant API calls
+- Progress tracking with visual progress bar for user feedback
+- Parallel processing with Promise.allSettled for resilience
+
+**Known Limitations**:
+- Financial precision uses `toFixed(2)` - acceptable for single transactions, consider decimal.js for batch operations (>1000 calculations)
+- Cache uses base64 encoding for keys - collision-resistant but not cryptographically secure
+- Max 8 concurrent tabs to prevent browser resource exhaustion
+- Scrapers are fragile - platform DOM changes require scraper updates
+
 ## Common Commands
 
 ```bash
@@ -115,19 +167,44 @@ The application operates in two environments with different API routing:
 - Exchange rate is hardcoded (7.23) - not fetched dynamically
 - No automated tests are configured
 
+**New in Multi-Platform Feature**:
+- Platform scrapers are injected as content scripts and run in page context (requires host permissions in manifest.json)
+- Cache uses chrome.storage.session (10MB quota, auto-clears on browser close)
+- Progress tracking uses explicit completion signals to avoid race conditions
+- Cost config changes automatically invalidate cache to prevent stale calculations
+- Batch size is capped at 8 concurrent tabs to prevent browser performance issues
+- Financial calculations use toFixed(2) for display precision (see profitCalculator.js for scaling notes)
+
 ## File Structure
 
 ```
 src/
-├── App.jsx           # Main application component (530 lines)
-├── main.jsx          # React entry point
-├── index.css         # Global Tailwind imports
+├── App.jsx                   # Main application (multi-platform workflow orchestration)
+├── main.jsx                  # React entry point
+├── index.css                 # Global Tailwind imports
+├── config/
+│   ├── platforms.js          # Platform definitions and categories
+│   └── costConfig.js         # Cost calculation configuration
+├── components/
+│   ├── ComparisonTable.jsx   # Platform comparison table container
+│   ├── PlatformRow.jsx       # Individual platform row component
+│   ├── SettingsPanel.jsx     # API settings panel
+│   └── CostConfigPanel.jsx   # Cost configuration panel
 └── utils/
-    └── scrapers.js   # Amazon & 1688 scraper functions
+    ├── keywordExtractor.js   # AI keyword extraction (NVIDIA NIM)
+    ├── searchScrapers.js     # Multi-platform search scrapers
+    ├── tabManager.js         # Chrome tab management
+    ├── profitCalculator.js   # Profit calculation engine
+    ├── cache.js              # Session caching system
+    └── scrapers.js           # Detail page scrapers (Amazon/1688)
 
 public/
-├── manifest.json     # Chrome Extension manifest
-└── background.js     # Service worker for CORS bypass
+├── manifest.json             # Chrome Extension manifest (updated host permissions)
+└── background.js             # Service worker for CORS bypass
 
-dist/                 # Build output (created by npm run build)
+docs/
+└── plans/
+    └── 2026-01-20-multi-platform-comparison-implementation.md  # Implementation plan
+
+dist/                         # Build output (npm run build)
 ```
