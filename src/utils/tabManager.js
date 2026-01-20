@@ -27,12 +27,14 @@ export const searchPlatform = async (platformId, searchQuery, onProgress) => {
 
   onProgress?.(`Opening ${platform.name} search...`);
 
+  let tab = null;  // Track tab for cleanup
+
   try {
     // Build search URL
     const searchUrl = platform.searchUrl.replace('{query}', encodeURIComponent(searchQuery));
 
     // Open tab in background
-    const tab = await chrome.tabs.create({
+    tab = await chrome.tabs.create({
       url: searchUrl,
       active: false
     });
@@ -52,9 +54,6 @@ export const searchPlatform = async (platformId, searchQuery, onProgress) => {
 
     const products = results[0]?.result || [];
 
-    // Close the tab
-    await chrome.tabs.remove(tab.id);
-
     onProgress?.(`Found ${products.length} products on ${platform.name}`);
 
     return products;
@@ -62,6 +61,16 @@ export const searchPlatform = async (platformId, searchQuery, onProgress) => {
   } catch (error) {
     onProgress?.(`Error searching ${platform.name}: ${error.message}`);
     return [];
+  } finally {
+    // Always close the tab if it was created
+    if (tab && tab.id) {
+      try {
+        await chrome.tabs.remove(tab.id);
+      } catch (e) {
+        // Tab may have been closed already, ignore error
+        console.warn(`Failed to close tab ${tab.id}:`, e);
+      }
+    }
   }
 };
 
@@ -73,18 +82,24 @@ export const searchPlatform = async (platformId, searchQuery, onProgress) => {
  */
 const waitForTabLoad = (tabId, timeout = 5000) => {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error('Tab load timeout'));
-    }, timeout);
+    let completed = false;
 
     const listener = (updatedTabId, changeInfo) => {
       if (updatedTabId === tabId && changeInfo.status === 'complete') {
+        completed = true;
         clearTimeout(timer);
         chrome.tabs.onUpdated.removeListener(listener);
         // Additional delay to ensure JS has executed
         setTimeout(resolve, 1500);
       }
     };
+
+    const timer = setTimeout(() => {
+      if (!completed) {
+        chrome.tabs.onUpdated.removeListener(listener);
+        reject(new Error('Tab load timeout'));
+      }
+    }, timeout);
 
     chrome.tabs.onUpdated.addListener(listener);
   });
@@ -96,7 +111,7 @@ const waitForTabLoad = (tabId, timeout = 5000) => {
  * @param {string} searchQuery - Search query string
  * @param {Function} onProgress - Progress callback(platformId, message)
  * @param {number} batchSize - Max concurrent tabs (default 6)
- * @returns {Promise<Object>} Results keyed by platform ID
+ * @returns {Promise<Object>} Object with results and errors keyed by platform ID
  */
 export const searchMultiplePlatforms = async (
   platformIds,
@@ -105,6 +120,7 @@ export const searchMultiplePlatforms = async (
   batchSize = 6
 ) => {
   const results = {};
+  const errors = {};  // Track errors separately
 
   // Process in batches to avoid too many open tabs
   for (let i = 0; i < platformIds.length; i += batchSize) {
@@ -121,13 +137,14 @@ export const searchMultiplePlatforms = async (
       } catch (error) {
         console.error(`Platform ${platformId} search failed:`, error);
         results[platformId] = [];
+        errors[platformId] = error.message;  // Store error message
       }
     });
 
     await Promise.allSettled(batchPromises);
   }
 
-  return results;
+  return { results, errors };  // Return both results and errors
 };
 
 /**
