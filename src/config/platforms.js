@@ -60,7 +60,7 @@ export const PLATFORMS = [
     id: 'walmart',
     name: 'Walmart',
     searchUrl: 'https://www.walmart.com/search?q={query}',
-    enabled: false, // Phase 2
+    enabled: true,
     category: 'international',
     region: 'usa',
     hasDetailsScraper: false,
@@ -69,7 +69,7 @@ export const PLATFORMS = [
     id: 'pinduoduo',
     name: 'Pinduoduo',
     searchUrl: 'https://mobile.yangkeduo.com/search_result.html?search_key={query}',
-    enabled: false, // Phase 2
+    enabled: true,
     category: 'sourcing',
     region: 'china',
     hasDetailsScraper: false,
@@ -78,7 +78,7 @@ export const PLATFORMS = [
     id: 'jd',
     name: 'JD.com',
     searchUrl: 'https://search.jd.com/Search?keyword={query}',
-    enabled: false, // Phase 2
+    enabled: true,
     category: 'sourcing',
     region: 'china',
     hasDetailsScraper: false,

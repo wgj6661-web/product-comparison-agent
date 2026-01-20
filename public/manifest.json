@@ -8,7 +8,17 @@
     "https://integrate.api.nvidia.com/*",
     "https://generativelanguage.googleapis.com/*",
     "https://*.amazon.com/*",
-    "https://*.1688.com/*"
+    "https://*.1688.com/*",
+    "https://www.ebay.com/*",
+    "https://www.aliexpress.com/*",
+    "https://*.taobao.com/*",
+    "https://www.alibaba.com/*",
+    "https://www.walmart.com/*",
+    "https://*.jd.com/*",
+    "https://*.yangkeduo.com/*",
+    "https://www.etsy.com/*",
+    "https://www.wayfair.com/*",
+    "https://www.made-in-china.com/*"
   ],
   "background": {
     "service_worker": "background.js"

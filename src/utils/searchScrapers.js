@@ -344,6 +344,215 @@ export const taobaoSearchScraper = () => {
 };
 
 /**
+ * Walmart Search Result Scraper
+ * Extracts top 5 products from Walmart search results page
+ */
+export const walmartSearchScraper = () => {
+  const products = [];
+
+  try {
+    // Select all search result items with data-item-id attribute
+    const items = document.querySelectorAll('[data-item-id]');
+
+    for (const item of items) {
+      if (products.length >= MAX_PRODUCTS) break;
+
+      try {
+        // Extract title
+        const titleElement = item.querySelector('[data-automation-id="product-title"]');
+        if (!titleElement) continue;
+
+        const title = titleElement.innerText.trim();
+        if (!title) continue;
+
+        // Extract price with multiple selectors as fallback
+        const priceElement = item.querySelector('[itemprop="price"]') ||
+                            item.querySelector('.price-main');
+        if (!priceElement) continue;
+
+        const priceText = priceElement.innerText || priceElement.getAttribute('content');
+        const priceMatch = priceText.match(/[\d,]+\.?\d*/);
+        if (!priceMatch) continue;
+
+        const price = parseFloat(priceMatch[0].replace(/,/g, ''));
+        if (isNaN(price) || price === 0) continue;
+
+        // Extract URL
+        const linkElement = item.querySelector('a[link-identifier]');
+        const url = linkElement ? `https://www.walmart.com${linkElement.getAttribute('href')}` : '';
+
+        // Extract image URL
+        const imgElement = item.querySelector('img');
+        const imageUrl = extractImageUrl(imgElement);
+
+        // Walmart search results typically don't show seller, rating, or reviews
+        const seller = '';
+        const rating = 0;
+        const reviews = 0;
+
+        // Add product to results
+        products.push({
+          title,
+          price,
+          currency: 'USD',
+          url,
+          imageUrl,
+          seller,
+          rating,
+          reviews
+        });
+
+      } catch (error) {
+        logItemError('Walmart', error);
+        continue;
+      }
+    }
+
+  } catch (error) {
+    logScraperError('Walmart', error);
+  }
+
+  return products;
+};
+
+/**
+ * JD.com Search Result Scraper
+ * Extracts top 5 products from JD.com search results page
+ */
+export const jdSearchScraper = () => {
+  const products = [];
+
+  try {
+    // Select all search result items
+    const items = document.querySelectorAll('.gl-item');
+
+    for (const item of items) {
+      if (products.length >= MAX_PRODUCTS) break;
+
+      try {
+        // Extract title
+        const titleElement = item.querySelector('.p-name em');
+        if (!titleElement) continue;
+
+        const title = titleElement.innerText.trim();
+        if (!title) continue;
+
+        // Extract price (JD prices are in CNY)
+        const priceElement = item.querySelector('.p-price i');
+        if (!priceElement) continue;
+
+        const price = parseFloat(priceElement.innerText.trim());
+        if (isNaN(price) || price === 0) continue;
+
+        // Extract URL
+        const linkElement = item.querySelector('.p-name a');
+        const url = linkElement ? `https:${linkElement.href}` : '';
+
+        // Extract image URL
+        const imgElement = item.querySelector('img');
+        const imageUrl = normalizeUrl(extractImageUrl(imgElement));
+
+        // JD search results typically don't show seller in list view
+        const seller = '';
+        const rating = 0;
+        const reviews = 0;
+
+        // Add product to results (note: currency is CNY for JD)
+        products.push({
+          title,
+          price,
+          currency: 'CNY',
+          url,
+          imageUrl,
+          seller,
+          rating,
+          reviews
+        });
+
+      } catch (error) {
+        logItemError('JD', error);
+        continue;
+      }
+    }
+
+  } catch (error) {
+    logScraperError('JD', error);
+  }
+
+  return products;
+};
+
+/**
+ * Pinduoduo Search Result Scraper
+ * Extracts top 5 products from Pinduoduo search results page
+ */
+export const pinduoduoSearchScraper = () => {
+  const products = [];
+
+  try {
+    // Select all search result items (Pinduoduo uses dynamic class names)
+    const items = document.querySelectorAll('[class*="goods-item"]');
+
+    for (const item of items) {
+      if (products.length >= MAX_PRODUCTS) break;
+
+      try {
+        // Extract title
+        const titleElement = item.querySelector('[class*="goods-title"]');
+        if (!titleElement) continue;
+
+        const title = titleElement.innerText.trim();
+        if (!title) continue;
+
+        // Extract price (Pinduoduo prices are in CNY)
+        const priceElement = item.querySelector('[class*="goods-price"]');
+        if (!priceElement) continue;
+
+        const priceText = priceElement.innerText.trim();
+        const priceMatch = priceText.match(/[\d.]+/);
+        if (!priceMatch) continue;
+
+        const price = parseFloat(priceMatch[0]);
+        if (isNaN(price) || price === 0) continue;
+
+        // Pinduoduo search results use current page URL
+        const url = window.location.href;
+
+        // Extract image URL
+        const imgElement = item.querySelector('img');
+        const imageUrl = extractImageUrl(imgElement);
+
+        // Pinduoduo search results typically don't show seller, rating, or reviews in list view
+        const seller = '';
+        const rating = 0;
+        const reviews = 0;
+
+        // Add product to results (note: currency is CNY for Pinduoduo)
+        products.push({
+          title,
+          price,
+          currency: 'CNY',
+          url,
+          imageUrl,
+          seller,
+          rating,
+          reviews
+        });
+
+      } catch (error) {
+        logItemError('Pinduoduo', error);
+        continue;
+      }
+    }
+
+  } catch (error) {
+    logScraperError('Pinduoduo', error);
+  }
+
+  return products;
+};
+
+/**
  * Helper function to get the appropriate scraper for a platform
  * @param {string} platformId - Platform identifier (e.g., 'ebay', 'aliexpress', 'taobao')
  * @returns {Function|null} Scraper function or null if not available
@@ -357,7 +566,10 @@ export const getSearchScraper = (platformId) => {
   const scrapers = {
     ebay: ebaySearchScraper,
     aliexpress: aliexpressSearchScraper,
-    taobao: taobaoSearchScraper
+    taobao: taobaoSearchScraper,
+    walmart: walmartSearchScraper,
+    jd: jdSearchScraper,
+    pinduoduo: pinduoduoSearchScraper
   };
 
   return scrapers[normalizedId] || null;
