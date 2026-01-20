@@ -7,11 +7,12 @@ import {
 import { amazonScraper, sourcingScraper } from './utils/scrapers';
 
 // ----------------------------------------------------------------
-// 配置区域：已更新为 NVIDIA NIM API
+// 配置区域：NVIDIA NIM API
+// API Key 应通过环境变量 VITE_NVIDIA_API_KEY 设置
 // ----------------------------------------------------------------
 const CONFIG = {
   BASE_URL: "https://integrate.api.nvidia.com/v1",
-  API_KEY: "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",
+  API_KEY: import.meta.env.VITE_NVIDIA_API_KEY || "",
   // 使用 Llama 3.1 405B Instruct - NVIDIA 平台上最强大的开源模型之一，适合复杂推理
   MODEL: "meta/llama-3.1-405b-instruct"
 };

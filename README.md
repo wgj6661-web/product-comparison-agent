@@ -22,7 +22,7 @@ A Chrome extension for cross-border e-commerce arbitrage analysis. Analyze produ
 
 - Node.js 18+
 - npm or yarn
-- NVIDIA API Key
+- NVIDIA API Key (get it from https://build.nvidia.com/explore/llm)
 
 ### Installation
 
@@ -37,12 +37,18 @@ cd product-comparison-agent
 npm install
 ```
 
-3. Development server:
+3. Configure environment variables:
+```bash
+cp .env.example .env
+# Edit .env and add your NVIDIA API key
+```
+
+4. Development server:
 ```bash
 npm run dev
 ```
 
-4. Build for production:
+5. Build for production:
 ```bash
 npm run build
 ```
