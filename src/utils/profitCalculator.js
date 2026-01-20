@@ -4,7 +4,7 @@
  */
 
 import { DEFAULT_COST_CONFIG } from '../config/costConfig';
-import { PLATFORMS } from '../config/platforms';
+import { PLATFORMS, getPlatformsByCategory } from '../config/platforms';
 
 /**
  * Calculate profit metrics for a platform
@@ -22,6 +22,17 @@ export const calculateProfitMetrics = ({
   weight,
   platformId
 }, costConfig = DEFAULT_COST_CONFIG) => {
+
+  // Input validation
+  if (typeof sellingPrice !== 'number' || sellingPrice < 0) {
+    throw new Error('sellingPrice must be a non-negative number');
+  }
+  if (typeof sourceCost !== 'number' || sourceCost < 0) {
+    throw new Error('sourceCost must be a non-negative number');
+  }
+  if (typeof weight !== 'number' || weight <= 0) {
+    throw new Error('weight must be a positive number');
+  }
 
   const platform = PLATFORMS.find(p => p.id === platformId);
   if (!platform) {
@@ -62,13 +73,14 @@ export const calculateProfitMetrics = ({
   const netProfit = sellingPrice - totalCost;
 
   // Margin percentage
-  const margin = (netProfit / sellingPrice) * 100;
+  const margin = sellingPrice > 0 ? (netProfit / sellingPrice) * 100 : 0;
 
   // ROI percentage
-  const roi = (netProfit / totalCost) * 100;
+  const roi = totalCost > 0 ? (netProfit / totalCost) * 100 : 0;
 
-  // Break-even units (rough estimate)
-  const breakEven = Math.ceil(1000 / Math.max(netProfit, 1));
+  // Break-even units: number of units to sell to recover $1000 in fixed costs
+  // If netProfit <= 0, returns a very high number (effectively infinity)
+  const breakEven = netProfit > 0 ? Math.ceil(1000 / netProfit) : Infinity;
 
   return {
     sellingPrice,
@@ -80,6 +92,8 @@ export const calculateProfitMetrics = ({
       vat: vatCost,
       total: totalCost
     },
+    // Note: Using toFixed for display precision. For high-volume calculations,
+    // consider using a decimal library (decimal.js) for exact financial math.
     netProfit: parseFloat(netProfit.toFixed(2)),
     margin: `${margin.toFixed(1)}%`,
     roi: `${roi.toFixed(0)}%`,
@@ -95,7 +109,9 @@ export const calculateProfitMetrics = ({
  * @returns {number} Lowest source cost in USD
  */
 export const getLowestSourceCost = (allPlatformResults, costConfig = DEFAULT_COST_CONFIG) => {
-  const sourcingPlatforms = ['1688', 'taobao', 'alibaba', 'jd', 'pinduoduo'];
+  const sourcingPlatforms = getPlatformsByCategory('sourcing')
+    .concat(getPlatformsByCategory('wholesale'))
+    .map(p => p.id);
   let lowestCost = Infinity;
 
   for (const platformId of sourcingPlatforms) {
@@ -116,7 +132,10 @@ export const getLowestSourceCost = (allPlatformResults, costConfig = DEFAULT_COS
     }
   }
 
-  return lowestCost === Infinity ? 0 : lowestCost;
+  if (lowestCost === Infinity) {
+    throw new Error('No source cost available from Chinese platforms');
+  }
+  return lowestCost;
 };
 
 /**
@@ -133,12 +152,10 @@ export const calculateAllPlatformProfits = (
 ) => {
   const lowestSourceCost = getLowestSourceCost(allPlatformResults, costConfig);
 
-  if (lowestSourceCost === 0) {
-    throw new Error('No source cost available from Chinese platforms');
-  }
-
   const analyses = [];
-  const sellingPlatforms = ['amazon', 'ebay', 'walmart', 'aliexpress', 'etsy', 'wayfair'];
+  const sellingPlatforms = getPlatformsByCategory('international')
+    .concat(getPlatformsByCategory('vertical'))
+    .map(p => p.id);
 
   for (const platformId of sellingPlatforms) {
     const results = allPlatformResults[platformId];
