@@ -2,10 +2,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Loader2, Zap, Target, Layers, BarChart3,
-  ArrowRightLeft, CheckCircle2, AlertTriangle, ShieldCheck, Info, Copy, X, Settings
+  ArrowRightLeft, CheckCircle2, AlertTriangle, ShieldCheck, Info, Copy, X, Settings, DollarSign
 } from 'lucide-react';
 import { amazonScraper, sourcingScraper } from './utils/scrapers';
 import SettingsPanel from './components/SettingsPanel';
+import CostConfigPanel from './components/CostConfigPanel';
+import { DEFAULT_COST_CONFIG } from './config/costConfig';
 
 // ----------------------------------------------------------------
 // 配置区域：NVIDIA NIM API
@@ -27,6 +29,8 @@ const ArbitrageAgentPro = () => {
   const [apiKey, setApiKey] = useState(CONFIG.API_KEY);
   const [currentModel, setCurrentModel] = useState(CONFIG.MODEL);
   const [showSettings, setShowSettings] = useState(false);
+  const [costConfig, setCostConfig] = useState(DEFAULT_COST_CONFIG);
+  const [showCostConfig, setShowCostConfig] = useState(false);
   const logEndRef = useRef(null);
 
   const MODELS = [
@@ -313,7 +317,14 @@ const ArbitrageAgentPro = () => {
           </div>
         </div>
         <div className="flex items-center gap-2">
-            <button 
+            <button
+              onClick={() => setShowCostConfig(true)}
+              className="p-1.5 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-all"
+              title="Cost Configuration"
+            >
+              <DollarSign className="w-4 h-4" />
+            </button>
+            <button
               onClick={() => setShowSettings(!showSettings)}
               className="p-1.5 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-all"
             >
@@ -334,6 +345,15 @@ const ArbitrageAgentPro = () => {
         setCurrentModel={setCurrentModel}
         models={MODELS}
         onSave={saveSettings}
+      />
+
+      <CostConfigPanel
+        isOpen={showCostConfig}
+        onClose={() => setShowCostConfig(false)}
+        onSave={(config) => {
+          setCostConfig(config);
+          addLog("Cost configuration saved", "success");
+        }}
       />
 
       {/* URL 输入区 */}
