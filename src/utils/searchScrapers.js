@@ -7,6 +7,74 @@
  * Each scraper returns an array of up to 5 products with standardized format.
  */
 
+// Constants
+const MAX_PRODUCTS = 5;
+
+/**
+ * Shared Helper Functions
+ */
+
+/**
+ * Extracts numeric price from price element
+ * @param {HTMLElement} priceElement - DOM element containing price text
+ * @returns {number|null} Parsed price or null if invalid
+ */
+const extractPrice = (priceElement) => {
+  if (!priceElement) return null;
+
+  const priceText = priceElement.innerText.trim();
+  // Match formats: "$123.45", "$123", "123.45", "US $123.45"
+  // Requires decimal to have digits (e.g., "123." is matched as "123")
+  const priceMatch = priceText.match(/[\d,]+(?:\.\d+)?/);
+  if (!priceMatch) return null;
+
+  const price = parseFloat(priceMatch[0].replace(/,/g, ''));
+  return (isNaN(price) || price === 0) ? null : price;
+};
+
+/**
+ * Normalizes URL to ensure it's absolute with https protocol
+ * @param {string} url - URL to normalize
+ * @param {string} fallbackUrl - Fallback URL if input is empty
+ * @returns {string} Normalized absolute URL
+ */
+const normalizeUrl = (url, fallbackUrl = '') => {
+  if (!url) return fallbackUrl;
+  if (url.startsWith('//')) return 'https:' + url;
+  return url;
+};
+
+/**
+ * Extracts image URL from img element with fallback to data attributes
+ * @param {HTMLElement} imgElement - Image DOM element
+ * @returns {string} Image URL or empty string
+ */
+const extractImageUrl = (imgElement) => {
+  if (!imgElement) return '';
+
+  return imgElement.src ||
+         imgElement.getAttribute('data-src') ||
+         imgElement.getAttribute('data-lazy-img') || '';
+};
+
+/**
+ * Logs item parsing errors with platform context
+ * @param {string} platform - Platform name for error context
+ * @param {Error} error - Error object
+ */
+const logItemError = (platform, error) => {
+  console.error(`${platform} item parsing error:`, error);
+};
+
+/**
+ * Logs scraper-level errors with platform context
+ * @param {string} platform - Platform name for error context
+ * @param {Error} error - Error object
+ */
+const logScraperError = (platform, error) => {
+  console.error(`${platform} search scraper error:`, error);
+};
+
 /**
  * eBay Search Result Scraper
  * Extracts top 5 products from eBay search results page
@@ -19,8 +87,7 @@ export const ebaySearchScraper = () => {
     const items = document.querySelectorAll('.s-item');
 
     for (const item of items) {
-      // Skip if we already have 5 products
-      if (products.length >= 5) break;
+      if (products.length >= MAX_PRODUCTS) break;
 
       try {
         // Skip invalid items (check for "Shop on eBay" text which indicates placeholder)
@@ -36,15 +103,8 @@ export const ebaySearchScraper = () => {
         // Extract price with multiple selectors as fallback
         const priceElement = item.querySelector('.s-item__price') ||
                             item.querySelector('[class*="price"]');
-        if (!priceElement) continue;
-
-        const priceText = priceElement.innerText.trim();
-        // Extract numeric price (handle formats like "$123.45", "$123", "US $123.45")
-        const priceMatch = priceText.match(/[\d,]+\.?\d*/);
-        if (!priceMatch) continue;
-
-        const price = parseFloat(priceMatch[0].replace(/,/g, ''));
-        if (isNaN(price) || price === 0) continue;
+        const price = extractPrice(priceElement);
+        if (!price) continue;
 
         // Extract URL
         const linkElement = item.querySelector('.s-item__link');
@@ -53,7 +113,7 @@ export const ebaySearchScraper = () => {
         // Extract image URL
         const imgElement = item.querySelector('.s-item__image-img') ||
                           item.querySelector('img');
-        const imageUrl = imgElement ? imgElement.src : '';
+        const imageUrl = extractImageUrl(imgElement);
 
         // Extract seller name (optional)
         const sellerElement = item.querySelector('.s-item__seller-info-text');
@@ -81,14 +141,13 @@ export const ebaySearchScraper = () => {
         });
 
       } catch (error) {
-        console.error('eBay item parsing error:', error);
-        // Skip this item and continue with next
+        logItemError('eBay', error);
         continue;
       }
     }
 
   } catch (error) {
-    console.error('eBay search scraper error:', error);
+    logScraperError('eBay', error);
   }
 
   return products;
@@ -111,8 +170,7 @@ export const aliexpressSearchScraper = () => {
     );
 
     for (const item of items) {
-      // Skip if we already have 5 products
-      if (products.length >= 5) break;
+      if (products.length >= MAX_PRODUCTS) break;
 
       try {
         // Extract title with fallback selectors
@@ -133,34 +191,17 @@ export const aliexpressSearchScraper = () => {
           '[class*="Price"], ' +
           '[data-spm-anchor-id*="price"]'
         );
-        if (!priceElement) continue;
-
-        const priceText = priceElement.innerText.trim();
-        // Extract numeric price (handle formats like "$123.45", "US $123.45", "123.45")
-        const priceMatch = priceText.match(/[\d,]+\.?\d*/);
-        if (!priceMatch) continue;
-
-        const price = parseFloat(priceMatch[0].replace(/,/g, ''));
-        if (isNaN(price) || price === 0) continue;
+        const price = extractPrice(priceElement);
+        if (!price) continue;
 
         // Extract URL
         const linkElement = item.querySelector('a[href*="/item/"]') ||
                            item.querySelector('a');
-        let url = linkElement ? linkElement.href : '';
-        // Ensure absolute URL
-        if (url && url.startsWith('//')) {
-          url = 'https:' + url;
-        }
+        const url = normalizeUrl(linkElement ? linkElement.href : '');
 
         // Extract image URL
         const imgElement = item.querySelector('img');
-        let imageUrl = '';
-        if (imgElement) {
-          imageUrl = imgElement.src || imgElement.getAttribute('data-src') || '';
-          if (imageUrl.startsWith('//')) {
-            imageUrl = 'https:' + imageUrl;
-          }
-        }
+        const imageUrl = normalizeUrl(extractImageUrl(imgElement));
 
         // Extract seller name (optional, often not visible in search results)
         const sellerElement = item.querySelector('[class*="store"], [class*="seller"]');
@@ -190,14 +231,13 @@ export const aliexpressSearchScraper = () => {
         });
 
       } catch (error) {
-        console.error('AliExpress item parsing error:', error);
-        // Skip this item and continue with next
+        logItemError('AliExpress', error);
         continue;
       }
     }
 
   } catch (error) {
-    console.error('AliExpress search scraper error:', error);
+    logScraperError('AliExpress', error);
   }
 
   return products;
@@ -220,8 +260,7 @@ export const taobaoSearchScraper = () => {
     );
 
     for (const item of items) {
-      // Skip if we already have 5 products
-      if (products.length >= 5) break;
+      if (products.length >= MAX_PRODUCTS) break;
 
       try {
         // Extract title with fallback selectors
@@ -243,36 +282,17 @@ export const taobaoSearchScraper = () => {
           '[class*="Price"], ' +
           '.priceInt'
         );
-        if (!priceElement) continue;
-
-        const priceText = priceElement.innerText.trim();
-        // Extract numeric price (handle formats like "¥123.45", "123.45", "123")
-        const priceMatch = priceText.match(/[\d,]+\.?\d*/);
-        if (!priceMatch) continue;
-
-        const price = parseFloat(priceMatch[0].replace(/,/g, ''));
-        if (isNaN(price) || price === 0) continue;
+        const price = extractPrice(priceElement);
+        if (!price) continue;
 
         // Extract URL
         const linkElement = item.querySelector('a[href*="item.taobao.com"], a[href*="detail.tmall.com"]') ||
                            item.querySelector('a');
-        let url = linkElement ? linkElement.href : '';
-        // Ensure absolute URL
-        if (url && url.startsWith('//')) {
-          url = 'https:' + url;
-        }
+        const url = normalizeUrl(linkElement ? linkElement.href : '');
 
         // Extract image URL
         const imgElement = item.querySelector('img');
-        let imageUrl = '';
-        if (imgElement) {
-          imageUrl = imgElement.src ||
-                    imgElement.getAttribute('data-src') ||
-                    imgElement.getAttribute('data-lazy-img') || '';
-          if (imageUrl.startsWith('//')) {
-            imageUrl = 'https:' + imageUrl;
-          }
-        }
+        const imageUrl = normalizeUrl(extractImageUrl(imgElement));
 
         // Extract seller name (optional)
         const sellerElement = item.querySelector('[class*="shop"], [class*="store"]');
@@ -311,14 +331,13 @@ export const taobaoSearchScraper = () => {
         });
 
       } catch (error) {
-        console.error('Taobao item parsing error:', error);
-        // Skip this item and continue with next
+        logItemError('Taobao', error);
         continue;
       }
     }
 
   } catch (error) {
-    console.error('Taobao search scraper error:', error);
+    logScraperError('Taobao', error);
   }
 
   return products;
@@ -330,11 +349,16 @@ export const taobaoSearchScraper = () => {
  * @returns {Function|null} Scraper function or null if not available
  */
 export const getSearchScraper = (platformId) => {
+  // Input validation: handle invalid types, capitalization, and whitespace
+  if (!platformId || typeof platformId !== 'string') return null;
+
+  const normalizedId = platformId.toLowerCase().trim();
+
   const scrapers = {
     ebay: ebaySearchScraper,
     aliexpress: aliexpressSearchScraper,
     taobao: taobaoSearchScraper
   };
 
-  return scrapers[platformId] || null;
+  return scrapers[normalizedId] || null;
 };
