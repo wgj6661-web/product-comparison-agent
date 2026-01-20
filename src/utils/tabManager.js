@@ -11,9 +11,10 @@ import { getSearchScraper } from './searchScrapers';
  * @param {string} platformId - Platform identifier
  * @param {string} searchQuery - Search query string
  * @param {Function} onProgress - Progress callback
+ * @param {number} retries - Number of retry attempts (default 1)
  * @returns {Promise<Array>} Array of product results
  */
-export const searchPlatform = async (platformId, searchQuery, onProgress) => {
+export const searchPlatform = async (platformId, searchQuery, onProgress, retries = 1) => {
   const platform = PLATFORMS.find(p => p.id === platformId);
 
   if (!platform || !platform.enabled) {
@@ -25,53 +26,62 @@ export const searchPlatform = async (platformId, searchQuery, onProgress) => {
     throw new Error(`No scraper available for ${platformId}`);
   }
 
-  onProgress?.(`Opening ${platform.name} search...`);
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    let tabId = null;
 
-  let tab = null;  // Track tab for cleanup
+    try {
+      onProgress?.(`Opening ${platform.name} search...${attempt > 0 ? ` (retry ${attempt})` : ''}`);
 
-  try {
-    // Build search URL
-    const searchUrl = platform.searchUrl.replace('{query}', encodeURIComponent(searchQuery));
+      const searchUrl = platform.searchUrl.replace('{query}', encodeURIComponent(searchQuery));
 
-    // Open tab in background
-    tab = await chrome.tabs.create({
-      url: searchUrl,
-      active: false
-    });
+      const tab = await chrome.tabs.create({
+        url: searchUrl,
+        active: false
+      });
 
-    onProgress?.(`Waiting for ${platform.name} page load...`);
+      tabId = tab.id;
 
-    // Wait for page to load
-    await waitForTabLoad(tab.id, 5000);
+      onProgress?.(`Waiting for ${platform.name} page load...`);
+      await waitForTabLoad(tab.id, 5000);
 
-    onProgress?.(`Extracting ${platform.name} results...`);
+      onProgress?.(`Extracting ${platform.name} results...`);
 
-    // Inject scraper and get results
-    const results = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: scraper
-    });
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: scraper
+      });
 
-    const products = results[0]?.result || [];
+      const products = results[0]?.result || [];
 
-    onProgress?.(`Found ${products.length} products on ${platform.name}`);
+      await chrome.tabs.remove(tab.id);
+      tabId = null;
 
-    return products;
+      onProgress?.(`Found ${products.length} products on ${platform.name}`);
 
-  } catch (error) {
-    onProgress?.(`Error searching ${platform.name}: ${error.message}`);
-    return [];
-  } finally {
-    // Always close the tab if it was created
-    if (tab && tab.id) {
-      try {
-        await chrome.tabs.remove(tab.id);
-      } catch (e) {
-        // Tab may have been closed already, ignore error
-        console.warn(`Failed to close tab ${tab.id}:`, e);
+      return products;
+
+    } catch (error) {
+      // Clean up tab if still open
+      if (tabId) {
+        try {
+          await chrome.tabs.remove(tabId);
+        } catch (e) {
+          // Tab might already be closed
+        }
       }
+
+      if (attempt < retries) {
+        onProgress?.(`Retrying ${platform.name}...`);
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        continue;
+      }
+
+      onProgress?.(`Error searching ${platform.name}: ${error.message}`);
+      return [];
     }
   }
+
+  return [];
 };
 
 /**
