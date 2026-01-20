@@ -1,0 +1,179 @@
+/**
+ * Profit calculation engine with configurable cost parameters
+ * Calculates net profit, ROI, margins for each platform
+ */
+
+import { DEFAULT_COST_CONFIG } from '../config/costConfig';
+import { PLATFORMS } from '../config/platforms';
+
+/**
+ * Calculate profit metrics for a platform
+ * @param {Object} params - Calculation parameters
+ * @param {number} params.sellingPrice - Platform selling price in USD
+ * @param {number} params.sourceCost - Source cost in USD (already converted)
+ * @param {number} params.weight - Product weight in lbs
+ * @param {string} params.platformId - Platform identifier
+ * @param {Object} costConfig - Cost configuration object
+ * @returns {Object} Profit metrics
+ */
+export const calculateProfitMetrics = ({
+  sellingPrice,
+  sourceCost,
+  weight,
+  platformId
+}, costConfig = DEFAULT_COST_CONFIG) => {
+
+  const platform = PLATFORMS.find(p => p.id === platformId);
+  if (!platform) {
+    throw new Error(`Platform ${platformId} not found`);
+  }
+
+  // Determine shipping cost based on platform region
+  let shippingCostPerLb;
+  if (platform.region === 'usa') {
+    shippingCostPerLb = costConfig.shipping.usa;
+  } else if (platform.region === 'europe') {
+    shippingCostPerLb = costConfig.shipping.europe;
+  } else {
+    shippingCostPerLb = costConfig.shipping.other;
+  }
+
+  const shippingCost = weight * shippingCostPerLb;
+
+  // Calculate platform fee
+  let platformFee;
+  const feeConfig = costConfig.platformFees[platformId];
+
+  if (feeConfig === 'fba_calculator' || platformId === 'amazon') {
+    // Use simplified FBA calculation (can be enhanced later)
+    platformFee = sellingPrice * 0.15; // Approximate 15%
+  } else {
+    platformFee = sellingPrice * (feeConfig / 100);
+  }
+
+  // Calculate marketing and VAT
+  const marketingCost = sellingPrice * (costConfig.marketing / 100);
+  const vatCost = sellingPrice * (costConfig.vat / 100);
+
+  // Total costs
+  const totalCost = sourceCost + shippingCost + platformFee + marketingCost + vatCost;
+
+  // Net profit
+  const netProfit = sellingPrice - totalCost;
+
+  // Margin percentage
+  const margin = (netProfit / sellingPrice) * 100;
+
+  // ROI percentage
+  const roi = (netProfit / totalCost) * 100;
+
+  // Break-even units (rough estimate)
+  const breakEven = Math.ceil(1000 / Math.max(netProfit, 1));
+
+  return {
+    sellingPrice,
+    costs: {
+      sourceCost,
+      shipping: shippingCost,
+      platformFee,
+      marketing: marketingCost,
+      vat: vatCost,
+      total: totalCost
+    },
+    netProfit: parseFloat(netProfit.toFixed(2)),
+    margin: `${margin.toFixed(1)}%`,
+    roi: `${roi.toFixed(0)}%`,
+    breakEven,
+    score: 0 // Will be set by AI analysis
+  };
+};
+
+/**
+ * Find lowest source cost from Chinese platforms
+ * @param {Object} allPlatformResults - Results from all platforms
+ * @param {Object} costConfig - Cost configuration
+ * @returns {number} Lowest source cost in USD
+ */
+export const getLowestSourceCost = (allPlatformResults, costConfig = DEFAULT_COST_CONFIG) => {
+  const sourcingPlatforms = ['1688', 'taobao', 'alibaba', 'jd', 'pinduoduo'];
+  let lowestCost = Infinity;
+
+  for (const platformId of sourcingPlatforms) {
+    const results = allPlatformResults[platformId];
+    if (!results || results.length === 0) continue;
+
+    for (const product of results) {
+      let costInUsd;
+      if (product.currency === 'CNY') {
+        costInUsd = product.price / costConfig.exchange.cnyToUsd;
+      } else {
+        costInUsd = product.price;
+      }
+
+      if (costInUsd < lowestCost) {
+        lowestCost = costInUsd;
+      }
+    }
+  }
+
+  return lowestCost === Infinity ? 0 : lowestCost;
+};
+
+/**
+ * Calculate profit metrics for all platforms
+ * @param {Object} allPlatformResults - Results from all platforms
+ * @param {number} weight - Product weight in lbs
+ * @param {Object} costConfig - Cost configuration
+ * @returns {Array} Array of platform profit analyses
+ */
+export const calculateAllPlatformProfits = (
+  allPlatformResults,
+  weight,
+  costConfig = DEFAULT_COST_CONFIG
+) => {
+  const lowestSourceCost = getLowestSourceCost(allPlatformResults, costConfig);
+
+  if (lowestSourceCost === 0) {
+    throw new Error('No source cost available from Chinese platforms');
+  }
+
+  const analyses = [];
+  const sellingPlatforms = ['amazon', 'ebay', 'walmart', 'aliexpress', 'etsy', 'wayfair'];
+
+  for (const platformId of sellingPlatforms) {
+    const results = allPlatformResults[platformId];
+    if (!results || results.length === 0) continue;
+
+    // Use the best (lowest price) product from this platform
+    const bestProduct = results.reduce((best, current) =>
+      current.price < best.price ? current : best
+    );
+
+    try {
+      const metrics = calculateProfitMetrics({
+        sellingPrice: bestProduct.price,
+        sourceCost: lowestSourceCost,
+        weight,
+        platformId
+      }, costConfig);
+
+      analyses.push({
+        platformId,
+        platformName: PLATFORMS.find(p => p.id === platformId)?.name || platformId,
+        product: bestProduct,
+        metrics
+      });
+    } catch (error) {
+      console.error(`Profit calculation failed for ${platformId}:`, error);
+    }
+  }
+
+  // Sort by ROI descending
+  analyses.sort((a, b) => {
+    const aRoi = parseFloat(a.metrics.roi);
+    const bRoi = parseFloat(b.metrics.roi);
+    return bRoi - aRoi;
+  });
+
+  return analyses;
+};
