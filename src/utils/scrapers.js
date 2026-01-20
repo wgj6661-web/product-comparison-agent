@@ -69,3 +69,23 @@ export const sourcingScraper = () => {
     factory_location: getCleanText(['.factory-location', '.address', '.company-city']) || "Unknown"
   };
 };
+export const genericScraper = () => {
+  const getPrice = () => {
+    // Look for common price patterns
+    const bodyText = document.body.innerText;
+    const priceRegex = /([$¥€£])\s?([0-9,]+(\.[0-9]{2})?)/g;
+    const matches = [...bodyText.matchAll(priceRegex)];
+    if (matches.length > 0) {
+      // Return the most likely price (first one found usually)
+      return parseFloat(matches[0][2].replace(/,/g, ''));
+    }
+    return null;
+  };
+
+  return {
+    title: document.title,
+    price: getPrice(),
+    description: document.querySelector('meta[name="description"]')?.content || "",
+    url: window.location.href
+  };
+};

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 
 const PlatformRow = ({ analysis, rank, onViewDetails }) => {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(false); // Default close all
   const { platformName, product, metrics } = analysis;
 
   const roiValue = parseFloat(metrics.roi);
@@ -16,10 +16,10 @@ const PlatformRow = ({ analysis, rank, onViewDetails }) => {
   const medalEmoji = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '';
 
   return (
-    <div className={`${bgClass} border border-white/5 rounded-lg overflow-hidden transition-all`}>
+    <div className={`${bgClass} border border-white/5 rounded-lg overflow-hidden transition-all duration-300 hover:scale-[1.01] hover:border-white/20 hover:shadow-[0_0_20px_rgba(59,130,246,0.1)] group`}>
       {/* Main Row */}
       <div className="flex items-center gap-2 p-3 text-[10px]">
-        <div className="w-6 text-center text-xs">{medalEmoji}</div>
+        <div className="w-6 text-center text-xs group-hover:scale-110 transition-transform">{medalEmoji}</div>
 
         <div className="flex-1 min-w-0">
           <div className="font-bold text-white truncate">{platformName}</div>
@@ -50,7 +50,7 @@ const PlatformRow = ({ analysis, rank, onViewDetails }) => {
 
       {/* Expanded Details */}
       {expanded && (
-        <div className="border-t border-white/5 p-3 space-y-2 bg-black/20 text-[10px]">
+        <div className="border-t border-white/5 p-3 space-y-2 bg-black/20 text-[10px] animate-in fade-in slide-in-from-top-1 duration-300">
           <div className="grid grid-cols-2 gap-2">
             <div>
               <span className="text-slate-500">Source Cost:</span>

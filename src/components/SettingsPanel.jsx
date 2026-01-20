@@ -9,7 +9,8 @@ const SettingsPanel = ({
   currentModel,
   setCurrentModel,
   models,
-  onSave
+  onSave,
+  onLogout
 }) => {
   if (!isOpen) return null;
 
@@ -67,6 +68,15 @@ const SettingsPanel = ({
               className="px-4 bg-white/5 hover:bg-white/10 text-slate-300 py-2 rounded-xl text-xs font-bold transition-all"
             >
               Cancel
+            </button>
+          </div>
+          
+          <div className="pt-4 border-t border-white/5 mt-2">
+            <button
+              onClick={onLogout}
+              className="w-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border border-rose-500/20"
+            >
+              Sign Out Session
             </button>
           </div>
         </div>

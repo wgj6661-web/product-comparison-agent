@@ -7,12 +7,37 @@
  * Each scraper returns an array of up to 5 products with standardized format.
  */
 
-// Constants
 const MAX_PRODUCTS = 5;
 
 /**
- * Shared Helper Functions
+ * Detects if the current page is a login redirect or captcha block
+ * @returns {string|null} Block type or null if clear
  */
+const checkPageBlock = () => {
+  const url = window.location.href;
+  const title = document.title;
+  
+  // Login redirects
+  if (url.includes('login.') || 
+      url.includes('passport.') || 
+      title.includes('登录') || 
+      title.includes('Login')) {
+    return 'NEED_LOGIN';
+  }
+
+  // Captcha or security blocks
+  const bodyText = document.body.innerText;
+  if (bodyText.includes('验证码') || 
+      bodyText.includes('人机验证') || 
+      bodyText.includes('滑块') || 
+      bodyText.includes('CAPTCHA') ||
+      bodyText.includes('security check')) {
+    return 'CAPTCHA_BLOCKED';
+  }
+
+  return null;
+};
+
 
 /**
  * Extracts numeric price from price element
@@ -251,6 +276,10 @@ export const taobaoSearchScraper = () => {
   const products = [];
 
   try {
+    // Check for login or captcha blocks
+    const blockType = checkPageBlock();
+    if (blockType) throw new Error(blockType);
+
     // Taobao has different layouts (grid view, list view)
     const items = document.querySelectorAll(
       '.item, ' +
@@ -423,6 +452,10 @@ export const jdSearchScraper = () => {
   const products = [];
 
   try {
+    // Check for login or captcha blocks
+    const blockType = checkPageBlock();
+    if (blockType) throw new Error(blockType);
+
     // Select all search result items
     const items = document.querySelectorAll('.gl-item');
 
@@ -490,6 +523,10 @@ export const pinduoduoSearchScraper = () => {
   const products = [];
 
   try {
+    // Check for login or captcha blocks
+    const blockType = checkPageBlock();
+    if (blockType) throw new Error(blockType);
+
     // Select all search result items (Pinduoduo uses dynamic class names)
     const items = document.querySelectorAll('[class*="goods-item"]');
 
@@ -552,11 +589,94 @@ export const pinduoduoSearchScraper = () => {
   return products;
 };
 
+
 /**
- * Helper function to get the appropriate scraper for a platform
- * @param {string} platformId - Platform identifier (e.g., 'ebay', 'aliexpress', 'taobao')
- * @returns {Function|null} Scraper function or null if not available
+ * Amazon Search Result Scraper
+ * Extracts top 5 products from Amazon search results page
  */
+export const amazonSearchScraper = () => {
+  const products = [];
+  try {
+    const items = document.querySelectorAll('[data-component-type="s-search-result"]');
+    for (const item of items) {
+      if (products.length >= MAX_PRODUCTS) break;
+      try {
+        const titleElement = item.querySelector('h2');
+        if (!titleElement) continue;
+        const title = titleElement.innerText.trim();
+        const priceElement = item.querySelector('.a-price .a-offscreen') || 
+                            item.querySelector('.a-color-price');
+        const price = extractPrice(priceElement);
+        if (!price) continue;
+        const linkElement = item.querySelector('h2 a');
+        const url = linkElement ? `https://www.amazon.com${linkElement.getAttribute('href')}` : '';
+        const imgElement = item.querySelector('.s-image');
+        const imageUrl = extractImageUrl(imgElement);
+        products.push({ title, price, currency: 'USD', url, imageUrl, seller: 'Amazon', rating: 0, reviews: 0 });
+      } catch (e) { continue; }
+    }
+  } catch (e) { logScraperError('Amazon', e); }
+  return products;
+};
+
+/**
+ * Alibaba Search Result Scraper
+ */
+export const alibabaSearchScraper = () => {
+  const products = [];
+  try {
+    const items = document.querySelectorAll('.list-no-v2-outter, [class*="search-card-item"], [data-content="productItem"]');
+    for (const item of items) {
+      if (products.length >= MAX_PRODUCTS) break;
+      try {
+        const titleElement = item.querySelector('h2, [class*="title"]');
+        if (!titleElement) continue;
+        const title = titleElement.innerText.trim();
+        const priceElement = item.querySelector('[class*="price"]');
+        const price = extractPrice(priceElement);
+        if (!price) continue;
+        const linkElement = item.querySelector('a');
+        const url = normalizeUrl(linkElement ? linkElement.href : '');
+        const imgElement = item.querySelector('img');
+        const imageUrl = extractImageUrl(imgElement);
+        products.push({ title, price, currency: 'USD', url, imageUrl, seller: '', rating: 0, reviews: 0 });
+      } catch (e) { continue; }
+    }
+  } catch (e) { logScraperError('Alibaba', e); }
+  return products;
+};
+
+/**
+ * 1688 Search Result Scraper
+ */
+export const s1688SearchScraper = () => {
+  const products = [];
+  try {
+    // Check for login or captcha blocks
+    const blockType = checkPageBlock();
+    if (blockType) throw new Error(blockType);
+
+    const items = document.querySelectorAll('.sm-offer-item, .offer-list-item, [class*="offer-item"], .sw-card-item');
+    for (const item of items) {
+      if (products.length >= MAX_PRODUCTS) break;
+      try {
+        const titleElement = item.querySelector('.title, [class*="title"], .sw-item-title, a[title]');
+        if (!titleElement) continue;
+        const title = (titleElement.getAttribute('title') || titleElement.innerText).trim();
+        const priceElement = item.querySelector('.price, [class*="price"], .sw-item-price, [class*="price-num"]');
+        const price = extractPrice(priceElement);
+        if (!price) continue;
+        const linkElement = item.querySelector('a');
+        const url = normalizeUrl(linkElement ? linkElement.href : '');
+        const imgElement = item.querySelector('img');
+        const imageUrl = extractImageUrl(imgElement);
+        products.push({ title, price, currency: 'CNY', url, imageUrl, seller: '', rating: 0, reviews: 0 });
+      } catch (e) { continue; }
+    }
+  } catch (e) { logScraperError('1688', e); }
+  return products;
+};
+
 export const getSearchScraper = (platformId) => {
   // Input validation: handle invalid types, capitalization, and whitespace
   if (!platformId || typeof platformId !== 'string') return null;
@@ -569,7 +689,10 @@ export const getSearchScraper = (platformId) => {
     taobao: taobaoSearchScraper,
     walmart: walmartSearchScraper,
     jd: jdSearchScraper,
-    pinduoduo: pinduoduoSearchScraper
+    pinduoduo: pinduoduoSearchScraper,
+    amazon: amazonSearchScraper,
+    alibaba: alibabaSearchScraper,
+    '1688': s1688SearchScraper
   };
 
   return scrapers[normalizedId] || null;

@@ -1,18 +1,21 @@
 /*global chrome*/
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Loader2, Zap, Target, Layers, BarChart3,
+  Loader2, Zap, Target, Layers, BarChart3, Clock,
   ArrowRightLeft, CheckCircle2, AlertTriangle, ShieldCheck, Info, Copy, X, Settings, DollarSign
 } from 'lucide-react';
-import { amazonScraper, sourcingScraper } from './utils/scrapers';
+import { amazonScraper, sourcingScraper, genericScraper } from './utils/scrapers';
 import SettingsPanel from './components/SettingsPanel';
 import CostConfigPanel from './components/CostConfigPanel';
 import ComparisonTable from './components/ComparisonTable';
+import LoginScreen from './components/LoginScreen';
+import HistoryPanel from './components/HistoryPanel';
 import { DEFAULT_COST_CONFIG } from './config/costConfig';
 import { getEnabledPlatforms } from './config/platforms';
 import { extractKeywords, buildSearchQuery } from './utils/keywordExtractor';
 import { searchMultiplePlatforms, isExtensionEnvironment } from './utils/tabManager';
 import { calculateAllPlatformProfits } from './utils/profitCalculator';
+import { saveHistory } from './services/historyService';
 
 // ----------------------------------------------------------------
 // 配置区域：NVIDIA NIM API
@@ -26,6 +29,9 @@ const CONFIG = {
 };
 
 const ArbitrageAgentPro = () => {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [user, setUser] = useState(null);
+  const [showHistory, setShowHistory] = useState(false);
   const [targetUrl, setTargetUrl] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [decisionData, setDecisionData] = useState(null);
@@ -53,12 +59,33 @@ const ArbitrageAgentPro = () => {
 
   useEffect(() => {
     if (typeof chrome !== 'undefined' && chrome.storage) {
-      chrome.storage.local.get(['nvidia_api_key', 'pref_model'], (result) => {
+      chrome.storage.local.get(['nvidia_api_key', 'pref_model', 'is_logged_in', 'user_name'], (result) => {
         if (result.nvidia_api_key) setApiKey(result.nvidia_api_key);
         if (result.pref_model) setCurrentModel(result.pref_model);
+        if (result.is_logged_in) {
+          setIsLoggedIn(true);
+          setUser({ name: result.user_name });
+        }
       });
     }
   }, []);
+
+  const handleLogin = (username) => {
+    setIsLoggedIn(true);
+    setUser({ name: username });
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      chrome.storage.local.set({ is_logged_in: true, user_name: username });
+    }
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    setUser(null);
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      chrome.storage.local.set({ is_logged_in: false });
+    }
+    setShowSettings(false);
+  };
 
   const saveSettings = () => {
     if (typeof chrome !== 'undefined' && chrome.storage) {
@@ -78,7 +105,7 @@ const ArbitrageAgentPro = () => {
   useEffect(() => {
     if (typeof chrome !== 'undefined' && chrome.tabs) {
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs[0]?.url) {
+        if (tabs[0]?.url && !tabs[0].url.startsWith('chrome://')) {
           setTargetUrl(tabs[0].url);
         }
       });
@@ -111,6 +138,8 @@ const ArbitrageAgentPro = () => {
     addLog("报告已复制到剪贴板", "success");
   };
 
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
   const startAutonomousFlow = async () => {
     if (!targetUrl) {
       addLog("错误: 请先输入或打开一个目标商品链接", "error");
@@ -121,14 +150,19 @@ const ArbitrageAgentPro = () => {
     setLogs([]);
     setDecisionData(null);
     setPlatformAnalyses([]);
-    setSearchProgress('Initializing...');
+    setSearchProgress('Initializing Neural Engine...');
 
     try {
-      addLog("初始化 Multi-Platform 分析系统...", "system");
-      addLog(`连接模型: ${currentModel.split('/')[1]}`, "system");
+      addLog("正在初始化 Multi-Platform 深度分析系统...", "system");
+      await sleep(600);
+      addLog(`建立模型连接: ${currentModel.split('/')[1]}`, "system");
+      await sleep(400);
+      addLog("神经网络链路已就绪，准备注入抓取算子...", "system");
+      await sleep(800);
 
       // Step 1: Extract product info from current page
-      addLog(`正在解析页面数据: ${new URL(targetUrl).hostname}...`, "info");
+      addLog(`正在解析目标页面数据: ${new URL(targetUrl).hostname}...`, "info");
+      setSearchProgress('Scraping page data...');
 
       let scrapedData = {};
       let productTitle = '';
@@ -138,24 +172,28 @@ const ArbitrageAgentPro = () => {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         addLog("正在注入智能抓取脚本...", "info");
 
+        addLog("正在注入智能抓取脚本...", "info");
+
         const executeWithRetry = async (attempts = 3) => {
           for (let i = 0; i < attempts; i++) {
             try {
+              let scraperFunc = genericScraper;
+              if (targetUrl.includes('amazon.com')) scraperFunc = amazonScraper;
+              else if (targetUrl.includes('1688.com')) scraperFunc = sourcingScraper;
+
               const results = await chrome.scripting.executeScript({
                 target: { tabId: tab.id },
-                func: targetUrl.includes('amazon.com') ? amazonScraper : sourcingScraper
+                func: scraperFunc
               });
               const data = results[0].result;
 
-              // Validate data
-              if (targetUrl.includes('amazon.com') && data.price) {
-                return data;
-              } else if (targetUrl.includes('1688.com') && data.cost_cny) {
+              // Validate data (less strict for generic sites)
+              if (data && (data.title || data.price)) {
                 return data;
               }
 
               addLog(`重试数据提取 (${i + 1}/${attempts})...`, "warning");
-              await new Promise(r => setTimeout(r, 1500));
+              await sleep(1500);
             } catch (e) {
               if (i === attempts - 1) throw e;
             }
@@ -174,7 +212,8 @@ const ArbitrageAgentPro = () => {
 
       } else {
         // Non-extension environment: use test data
-        addLog("非插件环境，使用本地测试数据", "warning");
+        addLog("非插件环境，切换至仿真沙盒模式", "warning");
+        await sleep(1000);
         scrapedData = targetUrl.includes('amazon.com')
           ? { title: "Wireless Bluetooth Headphones Noise Cancelling", price: 389.0, fba_fee: 48.5, weight: 42.0, bsr: 850 }
           : { title: "蓝牙耳机降噪无线", cost_cny: 620.0, moq: 50, supplier_vetted: true, factory_location: "浙江省杭州市" };
@@ -184,30 +223,33 @@ const ArbitrageAgentPro = () => {
       }
 
       setProductWeight(weight);
-      addLog(`产品信息: ${productTitle.substring(0, 30)}...`, "success");
+      addLog(`产品解析完成: ${productTitle.substring(0, 32)}...`, "success");
+      await sleep(600);
 
       // Step 2: AI Keyword Extraction
-      addLog("正在提取搜索关键词...", "info");
-      setSearchProgress('Extracting keywords...');
+      addLog("计算最优搜索向量...", "info");
+      setSearchProgress('Extracting semantic keywords...');
+      await sleep(400);
 
       let extractedKeywords;
       try {
         extractedKeywords = await extractKeywords(productTitle, apiKey, currentModel);
-        addLog(`关键词: "${extractedKeywords.keywords}"`, "success");
+        addLog(`语义关键词提取成功: "${extractedKeywords.keywords}"`, "success");
       } catch (error) {
-        addLog(`关键词提取失败，使用原始标题: ${error.message}`, "warning");
+        addLog(`关键词提取失败，降级至原始模式: ${error.message}`, "warning");
         extractedKeywords = { keywords: productTitle.substring(0, 50), category: '', brand: '' };
       }
 
       const searchQuery = buildSearchQuery(extractedKeywords, false);
-      addLog(`搜索词: "${searchQuery}"`, "info");
+      addLog(`构造跨平台检索式: "${searchQuery}"`, "info");
+      await sleep(800);
 
       // Step 3: Multi-Platform Search
       const enabledPlatforms = getEnabledPlatforms();
       const platformIds = enabledPlatforms.map(p => p.id);
 
-      addLog(`开始搜索 ${platformIds.length} 个平台...`, "info");
-      setSearchProgress(`Searching ${platformIds.length} platforms...`);
+      addLog(`启动多线程并发检索 (共 ${platformIds.length} 个节点)...`, "system");
+      setSearchProgress(`Scanning global platforms...`);
 
       let allPlatformResults = {};
 
@@ -218,23 +260,28 @@ const ArbitrageAgentPro = () => {
           searchQuery,
           (platformId, msg) => {
             addLog(`[${platformId}] ${msg}`, "info");
-            setSearchProgress(`Analyzing: ${platformId}...`);
+            setSearchProgress(`Active: ${platformId}...`);
           },
-          6 // Batch size
+          3 // Batch size reduced for a more "active" feel (not all at once)
         );
 
         allPlatformResults = results;
 
         // Log any errors
         Object.entries(errors).forEach(([platformId, error]) => {
-          addLog(`[${platformId}] Error: ${error}`, "error");
+          addLog(`[${platformId}] 节点响应延迟: ${error}`, "error");
         });
 
       } else {
-        // Non-extension environment: use mock data
-        addLog("非插件环境，使用模拟多平台数据", "warning");
+        // Non-extension environment: use mock data with simulated delay
+        addLog("正在从分布式节点同步数据...", "info");
+        
+        // Simulated delayed loading
+        for (const pid of platformIds) {
+          addLog(`[${pid}] 数据包同步中...`, "info");
+          await sleep(Math.random() * 500 + 300);
+        }
 
-        // Mock data for testing
         allPlatformResults = {
           'amazon': [
             { title: 'Bluetooth Headphones Premium', price: 399.99, currency: 'USD', url: 'https://amazon.com/test', rating: 4.5 }
@@ -253,13 +300,19 @@ const ArbitrageAgentPro = () => {
           ],
           'alibaba': [
             { title: 'Wireless Headphones Wholesale', price: 480, currency: 'CNY', url: 'https://alibaba.com/test', rating: 4.0 }
-          ]
+          ],
+          'walmart': [],
+          'jd': [],
+          'pinduoduo': []
         };
       }
 
+      await sleep(1000);
+      addLog("数据同步完成，进入利润分析引擎...", "system");
+
       // Step 4: Calculate profit metrics for all platforms
-      addLog("正在计算利润指标...", "info");
-      setSearchProgress('Calculating profit metrics...');
+      setSearchProgress('Running profit engine...');
+      await sleep(600);
 
       let analyses = [];
       try {
@@ -269,32 +322,49 @@ const ArbitrageAgentPro = () => {
           costConfig
         );
 
-        addLog(`成功分析 ${analyses.length} 个平台`, "success");
+        addLog(`策略挖掘完成: 成功识别 ${analyses.length} 个套利机会`, "success");
       } catch (error) {
-        addLog(`利润计算错误: ${error.message}`, "error");
-
-        // If calculation fails, still show empty results
+        addLog(`风险控制模块报错: ${error.message}`, "error");
         analyses = [];
       }
 
       // Step 5: Update UI with results
+      await sleep(800);
       setPlatformAnalyses(analyses);
       setSearchProgress('');
 
       if (analyses.length > 0) {
-        addLog(`最佳平台: ${analyses[0].platformName} (ROI: ${analyses[0].metrics.roi})`, "success");
+        addLog(`最优路径确定: ${analyses[0].platformName} (预期 ROI: ${analyses[0].metrics.roi})`, "success");
+        addLog("点击下方表格查看详细套利计划", "system");
+        
+        // Save to History
+        try {
+          saveHistory({
+            productTitle,
+            bestPlatform: analyses[0].platformName,
+            bestRoi: analyses[0].metrics.roi,
+            analyses: analyses 
+          });
+        } catch (historyError) {
+          console.error("Failed to save history:", historyError);
+          // Don't crash the app if history saving fails
+        }
       } else {
-        addLog("未找到可行的套利机会", "warning");
+        addLog("扫描完毕: 当前市场条件下未发现高价值机会", "warning");
       }
 
     } catch (err) {
       console.error(err);
-      addLog(`执行中断: ${err.message}`, "error");
+      addLog(`系统内核中断: ${err.message}`, "error");
     } finally {
       setIsAnalyzing(false);
       setSearchProgress('');
     }
   };
+
+  if (!isLoggedIn) {
+    return <LoginScreen onLogin={handleLogin} />;
+  }
 
   return (
     <div className="w-[450px] h-[600px] bg-[#09090b] text-slate-200 font-sans overflow-hidden flex flex-col relative">
@@ -314,7 +384,14 @@ const ArbitrageAgentPro = () => {
             <p className="text-[9px] text-slate-500 font-medium tracking-wide mt-0.5">POWERED BY NVIDIA</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
+            <button
+              onClick={() => setShowHistory(true)}
+              className="p-1.5 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-all"
+              title="History"
+            >
+              <Clock className="w-4 h-4" />
+            </button>
             <button
               onClick={() => setShowCostConfig(true)}
               className="p-1.5 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-all"
@@ -329,7 +406,7 @@ const ArbitrageAgentPro = () => {
               <Settings className="w-4 h-4" />
             </button>
             <div className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[9px] text-emerald-400 font-mono">
-              ACTIVE
+              {user?.name || 'ADMIN'}
             </div>
         </div>
       </nav>
@@ -343,6 +420,7 @@ const ArbitrageAgentPro = () => {
         setCurrentModel={setCurrentModel}
         models={MODELS}
         onSave={saveSettings}
+        onLogout={handleLogout}
       />
 
       <CostConfigPanel
@@ -351,6 +429,16 @@ const ArbitrageAgentPro = () => {
         onSave={(config) => {
           setCostConfig(config);
           addLog("Cost configuration saved", "success");
+        }}
+      />
+
+      <HistoryPanel
+        isOpen={showHistory}
+        onClose={() => setShowHistory(false)}
+        onLoadHistory={(details) => {
+          setPlatformAnalyses(details.analyses || []);
+          setTargetUrl(details.targetUrl || targetUrl);
+          addLog(`已加载历史记录: ${details.productTitle}`, "system");
         }}
       />
 

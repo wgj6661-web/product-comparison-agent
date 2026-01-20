@@ -2,11 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
+html, body {
   margin: 0;
   padding: 0;
   background-color: #0a0c10;
+  width: 450px;
+  height: 600px;
   overflow: hidden; /* 防止 Popup 出现不必要的滚动条 */
+}
+
+#root {
+  width: 100%;
+  height: 100%;
 }
 
 /* 自定义滚动条样式 */
@@ -19,4 +26,10 @@ body {
 .scrollbar-thin::-webkit-scrollbar-thumb {
   background: #334155;
   border-radius: 3px;
+}
+
+@keyframes loading {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(0); }
+  100% { transform: translateX(100%); }
 }

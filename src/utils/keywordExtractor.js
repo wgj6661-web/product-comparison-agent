@@ -11,23 +11,19 @@
  * @returns {Promise<{keywords: string, category: string, brand: string}>}
  */
 export const extractKeywords = async (title, apiKey, model = "meta/llama-3.1-405b-instruct") => {
+  // Clean platform prefix from title (e.g., "Amazon.com: ", "1688.com - ")
+  const cleanTitle = title.replace(/^(Amazon\.com|1688\.com|eBay|AliExpress|Taobao|JD\.com|Walmart|Alibaba\.com|Pinduoduo)[:\s\-|]+/, '').trim();
+
   const systemPrompt = `You are a product search keyword extractor. Extract core search keywords from product titles.
 
 Rules:
-1. Return ONLY a valid JSON object, no markdown, no explanation
-2. Remove unnecessary adjectives, promotional words, and brand names
-3. Keep model numbers, specifications, and product categories
-4. Return English keywords only, even if input is in Chinese
-5. Be concise - 3-7 words maximum
+1. Return ONLY a valid JSON object
+2. Remove unnecessary adjectives and promotional words (e.g., "new", "hot", "sale")
+3. Include brand name AND core model/product name
+4. Return keywords in English for international platforms (Amazon, eBay, Ali), and in Chinese if the input has meaningful Chinese for local platforms
+5. Return JSON format: {"keywords": "search term", "category": "...", "brand": "..."}`;
 
-Examples:
-- "Apple iPhone 15 Pro Max 256GB Blue Titanium" → {"keywords": "iPhone 15 Pro Max 256GB", "category": "smartphone", "brand": "Apple"}
-- "Wireless Bluetooth Headphones Noise Cancelling Over-Ear" → {"keywords": "wireless bluetooth headphones noise cancelling", "category": "headphones", "brand": ""}
-- "Sony PlayStation 5 Console Digital Edition" → {"keywords": "PlayStation 5 Digital", "category": "gaming console", "brand": "Sony"}`;
-
-  const userQuery = `Extract search keywords from: "${title}"
-
-Return JSON only: {"keywords": "...", "category": "...", "brand": "..."}`;
+  const userQuery = `Extract search keywords from: "${cleanTitle}"`;
 
   try {
     let response;
@@ -122,7 +118,7 @@ Return JSON only: {"keywords": "...", "category": "...", "brand": "..."}`;
     };
 
     return {
-      keywords: extracted.keywords || truncateAtWordBoundary(title, 50),
+      keywords: extracted.keywords || truncateAtWordBoundary(cleanTitle, 50),
       category: extracted.category || '',
       brand: extracted.brand || ''
     };
@@ -138,9 +134,9 @@ Return JSON only: {"keywords": "...", "category": "...", "brand": "..."}`;
       return lastSpace > 0 ? truncated.substring(0, lastSpace) : truncated;
     };
 
-    // Fallback: use first 50 characters of title at word boundary
+    // Fallback: use first 50 characters of cleaned title at word boundary
     return {
-      keywords: truncateAtWordBoundary(title, 50).trim(),
+      keywords: truncateAtWordBoundary(cleanTitle, 50).trim(),
       category: '',
       brand: ''
     };
