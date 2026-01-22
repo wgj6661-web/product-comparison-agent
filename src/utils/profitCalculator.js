@@ -106,9 +106,14 @@ export const calculateProfitMetrics = ({
  * Find lowest source cost from Chinese platforms
  * @param {Object} allPlatformResults - Results from all platforms
  * @param {Object} costConfig - Cost configuration
- * @returns {number} Lowest source cost in USD
+ * @param {number|null} fallbackSourceCost - Fallback cost if no Chinese platforms have data
+ * @returns {number|null} Lowest source cost in USD, or null if not available
  */
-export const getLowestSourceCost = (allPlatformResults, costConfig = DEFAULT_COST_CONFIG) => {
+export const getLowestSourceCost = (
+  allPlatformResults,
+  costConfig = DEFAULT_COST_CONFIG,
+  fallbackSourceCost = null
+) => {
   const sourcingPlatforms = getPlatformsByCategory('sourcing')
     .concat(getPlatformsByCategory('wholesale'))
     .map(p => p.id);
@@ -133,7 +138,11 @@ export const getLowestSourceCost = (allPlatformResults, costConfig = DEFAULT_COS
   }
 
   if (lowestCost === Infinity) {
-    throw new Error('No source cost available from Chinese platforms');
+    // No Chinese platform data found, use fallback cost if available
+    if (fallbackSourceCost !== null && fallbackSourceCost > 0) {
+      return fallbackSourceCost;
+    }
+    return null; // Return null instead of throwing error
   }
   return lowestCost;
 };
@@ -143,14 +152,22 @@ export const getLowestSourceCost = (allPlatformResults, costConfig = DEFAULT_COS
  * @param {Object} allPlatformResults - Results from all platforms
  * @param {number} weight - Product weight in lbs
  * @param {Object} costConfig - Cost configuration
+ * @param {number|null} fallbackSourceCost - Fallback source cost if Chinese platforms return no results
  * @returns {Array} Array of platform profit analyses
  */
 export const calculateAllPlatformProfits = (
   allPlatformResults,
   weight,
-  costConfig = DEFAULT_COST_CONFIG
+  costConfig = DEFAULT_COST_CONFIG,
+  fallbackSourceCost = null
 ) => {
-  const lowestSourceCost = getLowestSourceCost(allPlatformResults, costConfig);
+  const lowestSourceCost = getLowestSourceCost(allPlatformResults, costConfig, fallbackSourceCost);
+
+  // If still no source cost available, log warning and return empty results
+  if (lowestSourceCost === null) {
+    console.warn('No source cost available from Chinese platforms and no fallback provided');
+    return [];
+  }
 
   const analyses = [];
   const sellingPlatforms = getPlatformsByCategory('international')

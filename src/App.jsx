@@ -167,11 +167,10 @@ const ArbitrageAgentPro = () => {
       let scrapedData = {};
       let productTitle = '';
       let weight = 42.0; // Default weight
+      let scrapedSourceCost = null; // Store extracted source cost for fallback
 
       if (isExtensionEnvironment()) {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        addLog("正在注入智能抓取脚本...", "info");
-
         addLog("正在注入智能抓取脚本...", "info");
 
         const executeWithRetry = async (attempts = 3) => {
@@ -210,6 +209,14 @@ const ArbitrageAgentPro = () => {
         productTitle = scrapedData.title || 'Unknown Product';
         weight = scrapedData.weight || 42.0;
 
+        // Extract source cost from scraped data (CNY cost from 1688 or use current price)
+        if (scrapedData.cost_cny) {
+          scrapedSourceCost = scrapedData.cost_cny / exchangeRate;
+        } else if (scrapedData.price && targetUrl.includes('1688.com')) {
+          // If on 1688 but price was extracted as price, treat as cost
+          scrapedSourceCost = scrapedData.price / exchangeRate;
+        }
+
       } else {
         // Non-extension environment: use test data
         addLog("非插件环境，切换至仿真沙盒模式", "warning");
@@ -220,6 +227,11 @@ const ArbitrageAgentPro = () => {
 
         productTitle = scrapedData.title;
         weight = scrapedData.weight || 42.0;
+
+        // Extract source cost for fallback
+        if (scrapedData.cost_cny) {
+          scrapedSourceCost = scrapedData.cost_cny / exchangeRate;
+        }
       }
 
       setProductWeight(weight);
@@ -319,10 +331,17 @@ const ArbitrageAgentPro = () => {
         analyses = calculateAllPlatformProfits(
           allPlatformResults,
           weight,
-          costConfig
+          costConfig,
+          scrapedSourceCost  // Use scraped cost as fallback if Chinese platforms return no results
         );
 
-        addLog(`策略挖掘完成: 成功识别 ${analyses.length} 个套利机会`, "success");
+        if (analyses.length === 0 && scrapedSourceCost === null) {
+          addLog("警告: 未找到中国采购平台数据，且无本地成本数据。请尝试在1688页面运行分析。", "warning");
+        } else if (analyses.length === 0) {
+          addLog("警告: 未找到有效的销售平台数据", "warning");
+        } else {
+          addLog(`策略挖掘完成: 成功识别 ${analyses.length} 个套利机会`, "success");
+        }
       } catch (error) {
         addLog(`风险控制模块报错: ${error.message}`, "error");
         analyses = [];
