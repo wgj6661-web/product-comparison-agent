@@ -3,7 +3,7 @@
  * Handles search and scraping operations using Firecrawl API
  */
 
-const API_KEY = 'fc-5a45178ee652409b8ea58912c6b97f95'; // Temporary key storage
+const API_KEY = import.meta.env.VITE_FIRECRAWL_API_KEY || '';
 const API_URL = 'https://api.firecrawl.dev/v1';
 
 /**
